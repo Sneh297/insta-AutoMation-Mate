@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const morgan = require('morgan');
+
 const basicAuth = require('express-basic-auth');
 
 const staticRoutes = require('./static/static');
