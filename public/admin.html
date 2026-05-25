@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rules Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-900">
+
+  <div class="max-w-5xl mx-auto px-6 py-10">
+
+    <!-- Header -->
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold">Comment → DM Rules</h1>
+      <p class="text-slate-600 mt-2">
+        When someone comments your trigger word on a post, we check if they follow you.
+        Followers get your message instantly. Non-followers are asked to follow first.
+      </p>
+    </header>
+
+    <!-- Existing rules -->
+    <section class="mb-10">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Active rules</h2>
+        <button onclick="reloadAll()" class="text-sm text-slate-600 hover:text-slate-900">↻ Refresh</button>
+      </div>
+      <div id="rulesList" class="space-y-3">
+        <p class="text-slate-500 text-sm">Loading...</p>
+      </div>
+    </section>
+
+    <!-- Add a new rule -->
+    <section class="bg-white rounded-lg border border-slate-200 p-6">
+      <h2 class="text-xl font-semibold mb-4">Add a new rule</h2>
+
+      <!-- Step 1: pick a post -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-2">1. Pick a post</label>
+        <div id="postsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <p class="text-slate-500 text-sm col-span-full">Loading your posts...</p>
+        </div>
+        <input type="hidden" id="selectedMediaId" />
+        <p id="selectedMediaLabel" class="mt-2 text-sm text-slate-600"></p>
+      </div>
+
+      <!-- Step 2: trigger word -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-2">2. Trigger word</label>
+        <input
+          id="triggerWord"
+          type="text"
+          placeholder="e.g. naturals"
+          class="w-full border border-slate-300 rounded px-3 py-2 focus:outline-none focus:border-slate-900"
+        />
+        <p class="text-xs text-slate-500 mt-1">Matched case-insensitively against the comment text.</p>
+      </div>
+
+      <!-- Step 3: message text -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-2">3. Message text</label>
+        <textarea
+          id="messageText"
+          rows="3"
+          placeholder="Here's our Naturals collection ✨"
+          class="w-full border border-slate-300 rounded px-3 py-2 focus:outline-none focus:border-slate-900"
+        ></textarea>
+      </div>
+
+      <!-- Step 4: button -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <div>
+          <label class="block text-sm font-medium mb-2">4. Button label</label>
+          <input
+            id="buttonTitle"
+            type="text"
+            placeholder="Shop now"
+            maxlength="20"
+            class="w-full border border-slate-300 rounded px-3 py-2 focus:outline-none focus:border-slate-900"
+          />
+          <p class="text-xs text-slate-500 mt-1">Max 20 characters.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">5. Button URL</label>
+          <input
+            id="buttonUrl"
+            type="url"
+            placeholder="https://example.com/shop"
+            class="w-full border border-slate-300 rounded px-3 py-2 focus:outline-none focus:border-slate-900"
+          />
+          <p class="text-xs text-slate-500 mt-1">Must be HTTPS.</p>
+        </div>
+      </div>
+
+      <!-- Save -->
+      <div class="flex items-center gap-3">
+        <button
+          onclick="saveRule()"
+          class="bg-slate-900 text-white px-5 py-2 rounded font-medium hover:bg-slate-700"
+        >
+          Save rule
+        </button>
+        <p id="saveStatus" class="text-sm"></p>
+      </div>
+    </section>
+
+    <p class="text-xs text-slate-400 mt-8 text-center">
+      Rules are saved to <code>rules.json</code> on the server.
+    </p>
+  </div>
+
+  <script>
+    // ---------- State ----------
+    let posts = [];
+    let rules = [];
+
+    // ---------- Helpers ----------
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('saveStatus');
+      el.textContent = msg;
+      el.className = 'text-sm ' + (isError ? 'text-red-600' : 'text-green-700');
+      if (msg) setTimeout(() => { el.textContent = ''; }, 4000);
+    }
+
+    // ---------- Load posts ----------
+    async function loadPosts() {
+      const grid = document.getElementById('postsGrid');
+      try {
+        const res = await fetch('/api/posts');
+        const data = await res.json();
+        posts = data.data || [];
+
+        if (posts.length === 0) {
+          grid.innerHTML = '<p class="text-slate-500 text-sm col-span-full">No posts found.</p>';
+          return;
+        }
+
+        grid.innerHTML = posts.map(p => {
+          const img = p.media_type === 'VIDEO' ? p.thumbnail_url : p.media_url;
+          const caption = (p.caption || '').slice(0, 60);
+          return `
+            <button
+              type="button"
+              data-id="${escapeHtml(p.id)}"
+              data-caption="${escapeHtml(caption)}"
+              onclick="selectPost(this)"
+              class="group relative aspect-square overflow-hidden rounded border-2 border-transparent hover:border-slate-400 focus:border-slate-900 outline-none"
+            >
+              <img src="${escapeHtml(img)}" alt="" class="w-full h-full object-cover" />
+              <div class="absolute inset-x-0 bottom-0 bg-black/50 text-white text-xs px-2 py-1 truncate">
+                ${escapeHtml(caption) || '(no caption)'}
+              </div>
+            </button>
+          `;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = '<p class="text-red-600 text-sm col-span-full">Failed to load posts.</p>';
+      }
+    }
+
+    function selectPost(btn) {
+      document.querySelectorAll('#postsGrid button').forEach(b => {
+        b.classList.remove('border-slate-900', 'ring-2', 'ring-slate-900');
+      });
+      btn.classList.add('border-slate-900', 'ring-2', 'ring-slate-900');
+
+      const id = btn.dataset.id;
+      const caption = btn.dataset.caption;
+      document.getElementById('selectedMediaId').value = id;
+      document.getElementById('selectedMediaLabel').textContent =
+        `Selected: ${caption || '(no caption)'}`;
+    }
+
+    // ---------- Load rules ----------
+    async function loadRules() {
+      const list = document.getElementById('rulesList');
+      try {
+        const res = await fetch('/api/rules');
+        rules = await res.json();
+
+        if (rules.length === 0) {
+          list.innerHTML = '<p class="text-slate-500 text-sm">No rules yet. Add one below.</p>';
+          return;
+        }
+
+        list.innerHTML = rules.map(r => {
+          const post = posts.find(p => p.id === r.id);
+          const thumb = post ? (post.media_type === 'VIDEO' ? post.thumbnail_url : post.media_url) : null;
+          return `
+            <div class="bg-white border border-slate-200 rounded p-4 flex items-center gap-4">
+              <div class="w-16 h-16 bg-slate-100 rounded overflow-hidden shrink-0">
+                ${thumb ? `<img src="${escapeHtml(thumb)}" class="w-full h-full object-cover" />` : ''}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm">
+                  When someone comments
+                  <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded">${escapeHtml(r.comment)}</span>
+                </p>
+                <p class="text-sm text-slate-600 truncate mt-1">→ ${escapeHtml(r.response.text)}</p>
+                <p class="text-xs text-slate-500 mt-1 truncate">
+                  Button: <span class="font-medium">${escapeHtml(r.response.button_title)}</span>
+                  → ${escapeHtml(r.response.button_url)}
+                </p>
+              </div>
+              <button
+                onclick="deleteRule('${escapeHtml(r.id)}', '${escapeHtml(r.comment)}')"
+                class="text-sm text-red-600 hover:text-red-800 shrink-0"
+              >Delete</button>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        list.innerHTML = '<p class="text-red-600 text-sm">Failed to load rules.</p>';
+      }
+    }
+
+    // ---------- Save ----------
+    async function saveRule() {
+      const mediaId    = document.getElementById('selectedMediaId').value.trim();
+      const comment    = document.getElementById('triggerWord').value.trim();
+      const text       = document.getElementById('messageText').value.trim();
+      const btnTitle   = document.getElementById('buttonTitle').value.trim();
+      const btnUrl     = document.getElementById('buttonUrl').value.trim();
+
+      if (!mediaId)  return setStatus('Pick a post first.', true);
+      if (!comment)  return setStatus('Trigger word is required.', true);
+      if (!text)     return setStatus('Message text is required.', true);
+      if (!btnTitle) return setStatus('Button label is required.', true);
+      if (!btnUrl.startsWith('https://')) return setStatus('Button URL must start with https://', true);
+
+      const rule = {
+        id: mediaId,
+        comment,
+        response: { text, button_title: btnTitle, button_url: btnUrl },
+      };
+
+      try {
+        const res = await fetch('/api/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rule),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'Failed');
+        }
+        setStatus('Rule saved ✓');
+        clearForm();
+        await loadRules();
+      } catch (err) {
+        setStatus('Save failed: ' + err.message, true);
+      }
+    }
+
+    async function deleteRule(id, comment) {
+      if (!confirm(`Delete rule for "${comment}"?`)) return;
+      try {
+        await fetch(`/api/rules/${encodeURIComponent(id)}/${encodeURIComponent(comment)}`, {
+          method: 'DELETE'
+        });
+        await loadRules();
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+      }
+    }
+
+    function clearForm() {
+      document.getElementById('selectedMediaId').value = '';
+      document.getElementById('selectedMediaLabel').textContent = '';
+      document.querySelectorAll('#postsGrid button').forEach(b =>
+        b.classList.remove('border-slate-900', 'ring-2', 'ring-slate-900'));
+      document.getElementById('triggerWord').value = '';
+      document.getElementById('messageText').value = '';
+      document.getElementById('buttonTitle').value = '';
+      document.getElementById('buttonUrl').value = '';
+    }
+
+    async function reloadAll() {
+      await loadPosts();
+      await loadRules();
+    }
+
+    reloadAll();
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+[
+  {
+    "id": "18082904210139100",
+    "comment": "parth",
+    "response": {
+      "text": "Thanks for commenting! Here's the link 👇",
+      "button_title": "Open link",
+      "button_url": "https://example.com"
+    }
+  },
+  {
+    "id": "17897811894306360",
+    "comment": "nice",
+    "response": {
+      "text": "Take ur nice",
+      "button_title": "Take",
+      "button_url": "https://thisisnice.com"
+    }
+  },
+  {
+    "id": "17973380454024830",
+    "comment": "aatt",
+    "response": {
+      "text": "aatt",
+      "button_title": "ssod",
+      "button_url": "https://hello.com"
+    }
+  }
+]
